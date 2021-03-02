@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Creating cellular automata with shaders and three.js</title>
+    <style>
+        body {
+            margin: 0;
+        }
+
+        #myCanvas {
+            width: 2600px;
+            height: 1400px;
+            display: block;
+            margin: 0;
+            padding: 0;
+        }
+    </style>
+</head>
+
+<body>
+    <script src="https://code.createjs.com/1.0.0/tweenjs.min.js"></script>
+    <canvas id="myCanvas">
+        Your browser does not support the HTML canvas tag.</canvas>
+    <script type="module">
+        import * as THREE from './three.js-r125/build/three.module.js';
+        import { EffectComposer } from './three.js-r125/examples/jsm/postprocessing/EffectComposer.js';
+        import { RenderPass } from './three.js-r125/examples/jsm/postprocessing/RenderPass.js';
+        import { ShaderPass } from './three.js-r125/examples/jsm/postprocessing/ShaderPass.js';
+        import { SavePass } from './three.js-r125/examples/jsm/postprocessing/SavePass.js';
+
+        let drawWithMouse = true;
+        let isDrawing = false;
+        let mouse = new THREE.Vector2(); //The mouse position
+
+        let squares = [];
+
+        const canvas = document.querySelector("#myCanvas");
+
+        if (drawWithMouse) {
+            window.addEventListener('mousedown', e => {
+                isDrawing = true;
+            });
+
+            window.addEventListener('mousemove', e => {
+                e.preventDefault();
+                mouse.x = Math.floor((e.pageX - (canvas.clientWidth / 2)) / automataSize) * automataSize - automataSize / 2;
+                mouse.y = Math.floor(((canvas.clientHeight / 2) - e.pageY) / automataSize) * automataSize - automataSize / 2;;
+            });
+
+            window.addEventListener('click', e => {
+                e.preventDefault();
+                mouse.x = Math.floor((e.pageX - (canvas.clientWidth / 2)) / automataSize) * automataSize - automataSize / 2;
+                mouse.y = Math.floor(((canvas.clientHeight / 2) - e.pageY) / automataSize) * automataSize - automataSize / 2;;
+            });
+
+            window.addEventListener('mouseup', e => {
+                isDrawing = false;
+            });
+        }
+
+        function drawSquare(x, y, scene) {
+            //we need a square, basically a plane with z set to zero
+            const automata = new THREE.PlaneGeometry(automataSize - gridWeight * 2, automataSize - gridWeight * 2);
+            const automataMaterial = new THREE.MeshBasicMaterial({ color: activeColor });
+            const automataMesh = new THREE.Mesh(automata, automataMaterial);
+            scene.add(automataMesh);
+            automataMesh.position.set(x, y, 0);
+            squares.push(automataMesh);
+        }
+
+        //    []
+        //       []
+        // [] [] []
+        function drawGlider(scene) {
+            let halfSquare = automataSize / 2;
+            drawSquare(halfSquare, halfSquare, scene);
+            drawSquare(3 * halfSquare, halfSquare, scene);
+            drawSquare(5 * halfSquare, halfSquare, scene);
+            drawSquare(5 * halfSquare, 3 * halfSquare, scene);
+            drawSquare(3 * halfSquare, 5 * halfSquare, scene);
+        }
+
+        function setFirstState(target) {
+            drawGlider(scene);
+            renderer.setRenderTarget(target);
+            renderer.render(scene, camera);
+            clearSquares();
+        }
+
+        function clearSquares() {
+            for (const square of squares) {
+                scene.remove(square);
+            }
+        }
+
+        function stepper(source, target) {
+            automataShader.uniforms.u_resolution.value.set(canvas.clientWidth, canvas.clientHeight);
+            automataShader.uniforms.u_texture.value = source.texture;
+            renderer.setRenderTarget(target);
+            renderer.render(scene, camera);
+        }
+
+        function display(source) {
+            displayPassShader.uniforms.u_resolution.value.set(canvas.clientWidth, canvas.clientHeight);
+            displayPassShader.uniforms.u_texture.value = source.texture;
+            renderer.setRenderTarget(null);
+            renderer.render(scene2, camera);
+        }
+
+        function drawSquareIfNecessary() {
+            if (isDrawing) {
+                // calculate objects intersecting the picking raytexture
+                const intersects = raycaster.intersectObjects(scene.children);
+                if (intersects.length > 0) {
+                    drawSquare(mouse.x, mouse.y, scene);
+                }
+            }
+        }
+
+        function addGrid(width, automataSize) {
+            var grid = new THREE.GridHelper(width, automataSize);
+            scene.add(grid);
+        }
+
+        let raycaster = new THREE.Raycaster(); //For managing mouse interesection with objects
+        let automataSize = 1;
+
+        //Configurazione da salvare, molto bella
+        // let activeColor = new THREE.Color(1, 1, 1);
+        // let deadColor = new THREE.Color(1, 1, 0);
+        // let dyingColor = new THREE.Color(0, 1, 1);
+        // let gridColor =  new THREE.Color(0, 0, 0);
+
+        //I Seguenti colori sono perfetti con brians brain
+        // let activeColor = new THREE.Color("#152609");
+        // let deadColor = new THREE.Color("#98A633");
+        // let dyingColor = new THREE.Color("#152609");
+        // let gridColor =  new THREE.Color("#0D0D0D");
+
+        let activeColor = new THREE.Color("#152609");
+        let deadColor = new THREE.Color("#98A633");
+        let dyingColor = new THREE.Color("#428405");
+        let gridColor =  new THREE.Color("#0D0D0D");
+
+        let gridWeight = 0;
+        let gridActive = false;
+        const loader = new THREE.FileLoader();
+        const width = canvas.clientWidth;
+        const height = canvas.clientHeight;
+        const renderer = new THREE.WebGLRenderer({ canvas });
+
+        const step1 = new THREE.WebGLRenderTarget(width, height);
+        const step2 = new THREE.WebGLRenderTarget(width, height);
+
+        const buffers = [step1, step2];
+
+        renderer.setSize(width, height, false);
+        renderer.autoClearColor = false;
+
+        //We make the camera take the whole screen with his frustum
+        const camera = new THREE.OrthographicCamera(
+            -(canvas.clientWidth / 2), // left
+            (canvas.clientWidth / 2), // right
+            (canvas.clientHeight / 2), // top
+            -(canvas.clientHeight / 2), // bottom
+            -1, // near,
+            1, // far
+        );
+
+        const scene = new THREE.Scene();
+        let plane = new THREE.PlaneGeometry(canvas.clientWidth, canvas.clientHeight);
+
+        const scene2 = new THREE.Scene();
+        let plane2 = new THREE.PlaneGeometry(canvas.clientWidth, canvas.clientHeight);
+
+        const displayPassShader = {
+            uniforms: {
+                u_texture: { value: null },
+                u_resolution: { value: new THREE.Vector2(canvas.clientWidth, canvas.clientHeight) },
+            },
+            fragmentShader: `
+uniform sampler2D u_texture;
+uniform vec2 u_resolution;
+void main() {
+  vec2 coord = gl_FragCoord.xy/u_resolution;
+  gl_FragColor = texture2D(u_texture, coord);
+}
+`,
+        }
+
+        const automataShader = {
+            uniforms: {
+                u_texture: { value: null },
+                u_resolution: { value: new THREE.Vector2(canvas.clientWidth, canvas.clientHeight) },
+                u_automata_size: { value: automataSize },
+                u_grid_weigth: { value: gridWeight },
+                u_grid_color: { value: new THREE.Vector4(gridColor.r, gridColor.g, gridColor.b, 1) },
+                u_grid_active: { value: gridActive },
+                u_alive_color: { value: new THREE.Vector4(activeColor.r, activeColor.g, activeColor.b, 1) },
+                u_dying_color: { value: new THREE.Vector4(dyingColor.r, dyingColor.g, dyingColor.b, 1) },
+                u_dead_color: { value: new THREE.Vector4(deadColor.r, deadColor.g, deadColor.b, 1) },
+            },
+        };
+
+
+        loader.load('./shaders/briansbrain-stepper.frag', function (data) { automataShader.fragmentShader = data; automataMain() },);
+
+        function automataMain() {
+
+            const material = new THREE.ShaderMaterial(automataShader);
+            scene.add(new THREE.Mesh(plane, material));
+
+            const material2 = new THREE.ShaderMaterial(displayPassShader);
+            scene2.add(new THREE.Mesh(plane2, material2));
+
+            function resizeRendererToDisplaySize(renderer) {
+                const width = canvas.clientWidth;
+                const height = canvas.clientHeight;
+                const needResize = canvas.width !== width || canvas.height !== height;
+                if (needResize) {
+                    renderer.setSize(width, height, false);
+                }
+                return needResize;
+            }
+
+            createjs.Ticker.timingMode = createjs.Ticker.TIMEOUT;
+            //Fixed 30 FPS
+            createjs.Ticker.frameRate = 30;
+            createjs.Ticker.addEventListener("tick", animate);
+
+            let then = 0;
+            let firstStep = true;
+            let nextStateIndex = 0;
+            function animate() {
+                resizeRendererToDisplaySize(renderer);
+                const previousStateIndex = 1 - nextStateIndex;
+                if (isDrawing) {
+                    if (drawWithMouse) {
+                        drawSquareIfNecessary();
+                        renderer.setRenderTarget(null);
+                        renderer.render(scene, camera);
+                        return;
+                    }
+                } else {
+                    if (!firstStep) {
+                        stepper(buffers[previousStateIndex], buffers[nextStateIndex]); // Apply the automata
+                        display(buffers[nextStateIndex]); //here we simpy take the result of stepper and we paint it to screen
+                    } else {
+                        setFirstState(buffers[nextStateIndex]); //Initial state
+                        firstStep = false;
+                    }
+                    clearSquares();
+                }
+                nextStateIndex = previousStateIndex;
+            }
+        }
+    </script>
+</body>
+
+</html>
