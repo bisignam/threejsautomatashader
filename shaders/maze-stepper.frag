@@ -1,8 +1,5 @@
 uniform vec2 u_resolution;
 uniform sampler2D u_texture;
-varying vec4 vertColor;
-varying vec4 vertTexCoord; // queste sono le coordinate normalizzate
-uniform vec2 u_mouse;
 uniform float u_automata_size; // The block size in pixels
 uniform float u_grid_weigth;
 uniform vec4 u_grid_color;
@@ -10,6 +7,7 @@ uniform bool u_grid_active;
 uniform vec4 u_alive_color;
 uniform vec4 u_dying_color;
 uniform vec4 u_dead_color;
+
 
 int wasAlive(vec2 coord) {
   vec4 px = texture2D(
