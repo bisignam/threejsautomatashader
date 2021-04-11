@@ -453,18 +453,14 @@
                 return
               }
             } else if (cycleShader && changingShader) {
-              console.log('Switching shader')
               changeShaderWIthFixedImage()
               changingShader = false
               return
             } else {
               if (!firstStep) {
                 stepper(buffers[previousStateIndex], buffers[nextStateIndex]) // Apply the automata
-                console.log('Stepped')
                 display(buffers[nextStateIndex]) //here we simpy take the result of stepper and we paint it to screen
-                console.log('Displayed')
               } else {
-                console.log('First step')
                 setFirstState(buffers[nextStateIndex]) //Initial state
                 firstStep = false
               }
