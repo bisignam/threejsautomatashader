@@ -36,9 +36,8 @@
       let shadersFolder = './shaders/'
       let activeShaderIndex = 0
       let shaders = [
-        'briansbrain-stepper.frag',
-        'maze-stepper.frag',
         'gameoflife-stepper.frag',
+        'briansbrain-stepper.frag',
         'maze-stepper.frag',
         'dayandnight-stepper.frag',
         'seeds-stepper.frag',
@@ -47,6 +46,7 @@
       let play = true
       let drawWithMouse = true
       let cycleShader = true
+      let changingShader = false
       let isDrawing = false
       let mouse = new THREE.Vector2() //The mouse position
 
@@ -96,62 +96,86 @@
         window.addEventListener('keydown', (e) => {
           if (e.keyCode == '38') {
             //Key up
-            play = false
             activeShaderIndex = (activeShaderIndex + 1) % shaders.length
-            loader.load(
-              shadersFolder + shaders[activeShaderIndex],
-              function (data) {
-                currentAutomata.innerHTML = shaders[activeShaderIndex]
-                const previousStateIndex = computePreviousStepIndex()
-                // const ctx = document.createElement('canvas').getContext('2d')
-                // ctx.canvas.width = 1000
-                // ctx.canvas.height = 700
-                // ctx.fillStyle = '#FFF'
-                // ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height)
-                // const texture = new THREE.CanvasTexture(ctx.canvas)
-                // buffers[previousStateIndex].texture = new THREE.CanvasTexture(
-                //   canvas
-                // )
-                renderer.dispose()
-                renderer = new THREE.WebGLRenderer({ canvas: canvas })
-                renderer.setSize(canvas.clientWidth, canvas.clientHeight, false)
-                renderer.autoClearColor = false
-                textureLoader.load(
-                  'https://threejsfundamentals.org/threejs/resources/images/flower-1.jpg',
-                  (texture) => {
-                    // automataShader.uniforms = THREE.UniformsUtils.clone(
-                    //   automataShader.uniforms
-                    // )
-                    automataMesh.material.fragmentShader = data
-                    automataMesh.material.needsUpdate = true
-                    automataMesh.material.uniformsNeedUpdate = true
-                    const material3 = new THREE.MeshBasicMaterial({
-                      map: buffers[previousStateIndex].texture.clone(),
-                      //map: texture,
-                    })
-                    scene3.clear()
-                    scene3.add(new THREE.Mesh(plane3, material3))
-                    renderer.setRenderTarget(buffers[nextStateIndex])
-                    renderer.render(scene3, camera)
-                    renderer.setRenderTarget(null)
-                    renderer.render(scene3, camera)
-
-                    stepper(
-                      buffers[nextStateIndex],
-                      buffers[previousStateIndex]
-                    )
-                    display(buffers[previousStateIndex])
-                    play = true
-                  }
-                )
-              }
-            )
+            changingShader = true
           }
         })
       } // let activeColor = new THREE.Color('#152609')
       // let deadColor = new THREE.Color('#98A633')
       // let dyingColor = new THREE.Color('#428405')
       // let gridColor = new THREE.Color('#0D0D0D')
+
+      function changeShaderWIthFixedImage() {
+        loader.load(
+          shadersFolder + shaders[activeShaderIndex],
+          function (data) {
+            currentAutomata.innerHTML = shaders[activeShaderIndex]
+            let previousStateIndex = computePreviousStepIndex()
+            // const ctx = document.createElement('canvas').getContext('2d')
+            // ctx.canvas.width = 1000
+            // ctx.canvas.height = 700
+            // ctx.fillStyle = '#FFF'
+            // ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height)
+            // const texture = new THREE.CanvasTexture(ctx.canvas)
+            // buffers[previousStateIndex].texture = new THREE.CanvasTexture(
+            //   canvas
+            // )
+
+            renderer.dispose()
+            renderer = new THREE.WebGLRenderer({ canvas: canvas })
+            renderer.setSize(canvas.clientWidth, canvas.clientHeight, false)
+            renderer.autoClearColor = false
+            buffers[previousStateIndex].dispose()
+            buffers[previousStateIndex] = new THREE.WebGLRenderTarget(
+              width,
+              height
+            )
+            buffers[nextStateIndex].dispose()
+            buffers[nextStateIndex] = new THREE.WebGLRenderTarget(width, height)
+            textureLoader.load(
+              './images/1000_700_automata_state.png',
+              (texture) => {
+                clearSquares()
+                buffers[previousStateIndex].texture = texture
+
+                // automataShader.uniforms = THREE.UniformsUtils.clone(
+                //   automataShader.uniforms
+                // )
+
+                automataMesh.material.fragmentShader = data
+                automataMesh.material.needsUpdate = true
+                automataMesh.material.uniformsNeedUpdate = true
+
+                // stepper(
+                //   buffers[previousStateIndex],
+                //   buffers[nextStateIndex],
+                //   true
+                // )
+                // display(buffers[nextStateIndex])
+                // nextStateIndex = previousStateIndex
+
+                stepper(
+                  buffers[previousStateIndex],
+                  buffers[nextStateIndex],
+                  true
+                )
+
+                display(buffers[nextStateIndex])
+
+                nextStateIndex = previousStateIndex
+
+                previousStateIndex = computePreviousStepIndex()
+
+                stepper(buffers[previousStateIndex], buffers[nextStateIndex])
+
+                display(buffers[nextStateIndex])
+
+                nextStateIndex = previousStateIndex
+              }
+            )
+          }
+        )
+      }
 
       function drawSquare(x, y, scene) {
         //we need a square, basically a plane with z set to zero
@@ -193,13 +217,33 @@
         }
       }
 
-      function stepper(source, target) {
+      function stepper(source, target, copy) {
         automataShader.uniforms.u_resolution.value.set(
           canvas.clientWidth,
           canvas.clientHeight
         )
         automataShader.uniforms.u_texture.value = source.texture
+        if (copy != undefined) {
+          automataShader.uniforms.u_copy_step.value = copy ? true : false
+        } else {
+          automataShader.uniforms.u_copy_step.value = false
+        }
         renderer.setRenderTarget(target)
+        renderer.render(scene, camera)
+      }
+
+      function stepperSpecial(source, copy) {
+        automataShader.uniforms.u_resolution.value.set(
+          canvas.clientWidth,
+          canvas.clientHeight
+        )
+        automataShader.uniforms.u_texture.value = source.texture
+        if (copy != undefined) {
+          automataShader.uniforms.u_copy_step.value = copy ? true : false
+        } else {
+          automataShader.uniforms.u_copy_step.value = false
+        }
+        renderer.setRenderTarget(null)
         renderer.render(scene, camera)
       }
 
@@ -230,6 +274,55 @@
       function addGrid(width, automataSize) {
         var grid = new THREE.GridHelper(width, automataSize)
         scene.add(grid)
+      }
+
+      function createShader(copy) {
+        return {
+          uniforms: {
+            u_texture: { value: null },
+            u_resolution: {
+              value: new THREE.Vector2(canvas.clientWidth, canvas.clientHeight),
+            },
+            u_automata_size: { value: automataSize },
+            u_grid_weigth: { value: gridWeight },
+            u_grid_color: {
+              value: new THREE.Vector4(
+                gridColor.r,
+                gridColor.g,
+                gridColor.b,
+                1
+              ),
+            },
+            u_grid_active: { value: gridActive },
+            u_alive_color: {
+              value: new THREE.Vector4(
+                activeColor.r,
+                activeColor.g,
+                activeColor.b,
+                1
+              ),
+            },
+            u_dying_color: {
+              value: new THREE.Vector4(
+                dyingColor.r,
+                dyingColor.g,
+                dyingColor.b,
+                1
+              ),
+            },
+            u_dead_color: {
+              value: new THREE.Vector4(
+                deadColor.r,
+                deadColor.g,
+                deadColor.b,
+                1
+              ),
+            },
+            u_copy_step: {
+              value: false,
+            },
+          },
+        }
       }
 
       let raycaster = new THREE.Raycaster() //For managing mouse interesection with objects
@@ -284,7 +377,7 @@
         canvas.clientWidth,
         canvas.clientHeight
       )
-
+      false
       const scene2 = new THREE.Scene()
       let plane2 = new THREE.PlaneGeometry(
         canvas.clientWidth,
@@ -314,39 +407,9 @@
         `,
       }
 
-      const automataShader = {
-        uniforms: {
-          u_texture: { value: null },
-          u_resolution: {
-            value: new THREE.Vector2(canvas.clientWidth, canvas.clientHeight),
-          },
-          u_automata_size: { value: automataSize },
-          u_grid_weigth: { value: gridWeight },
-          u_grid_color: {
-            value: new THREE.Vector4(gridColor.r, gridColor.g, gridColor.b, 1),
-          },
-          u_grid_active: { value: gridActive },
-          u_alive_color: {
-            value: new THREE.Vector4(
-              activeColor.r,
-              activeColor.g,
-              activeColor.b,
-              1
-            ),
-          },
-          u_dying_color: {
-            value: new THREE.Vector4(
-              dyingColor.r,
-              dyingColor.g,
-              dyingColor.b,
-              1
-            ),
-          },
-          u_dead_color: {
-            value: new THREE.Vector4(deadColor.r, deadColor.g, deadColor.b, 1),
-          },
-        },
-      }
+      const automataShader = createShader()
+
+      createShader
 
       loader.load(shadersFolder + shaders[activeShaderIndex], function (data) {
         automataShader.fragmentShader = data
@@ -373,7 +436,7 @@
 
         createjs.Ticker.timingMode = createjs.Ticker.TIMEOUT
         //Fixed 30 FPS
-        createjs.Ticker.frameRate = 60
+        createjs.Ticker.frameRate = 10
         createjs.Ticker.addEventListener('tick', animate)
 
         let then = 0
@@ -389,14 +452,19 @@
                 renderer.render(scene, camera)
                 return
               }
+            } else if (cycleShader && changingShader) {
+              console.log('Switching shader')
+              changeShaderWIthFixedImage()
+              changingShader = false
+              return
             } else {
               if (!firstStep) {
-                // console.log(
-                //   'previous ' + previousStateIndex + ' next: ' + nextStateIndex
-                // )
                 stepper(buffers[previousStateIndex], buffers[nextStateIndex]) // Apply the automata
+                console.log('Stepped')
                 display(buffers[nextStateIndex]) //here we simpy take the result of stepper and we paint it to screen
+                console.log('Displayed')
               } else {
+                console.log('First step')
                 setFirstState(buffers[nextStateIndex]) //Initial state
                 firstStep = false
               }

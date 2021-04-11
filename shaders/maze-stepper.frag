@@ -7,6 +7,7 @@ uniform bool u_grid_active;
 uniform vec4 u_alive_color;
 uniform vec4 u_dying_color;
 uniform vec4 u_dead_color;
+uniform bool u_copy_step;
 
 
 int wasAlive(vec2 coord) {
@@ -44,6 +45,10 @@ cells survive from one generation to the next if they have at least 1 and at
 most 5 neighbours. Cells are born if they have exactly 3 neighbours
    **/
 void main() {
+         if(u_copy_step == true) {
+        vec2 coord = gl_FragCoord.xy/u_resolution;
+        gl_FragColor = texture2D(u_texture, coord);
+       } else 
   if (!isGridPixel(gl_FragCoord.xy) || !u_grid_active) {
     vec2 coord = getBlockCentre(gl_FragCoord.xy);
     int aliveNeighbors = aliveMooreNeighbors(coord);

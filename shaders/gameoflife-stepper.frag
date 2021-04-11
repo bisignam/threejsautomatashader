@@ -7,6 +7,7 @@ uniform bool u_grid_active;
 uniform vec4 u_alive_color;
 uniform vec4 u_dying_color;
 uniform vec4 u_dead_color;
+uniform bool u_copy_step;
 
 int wasAlive(vec2 coord) {
   vec4 px = texture2D(
@@ -28,6 +29,10 @@ bool isGridPixel(const in vec2 vPos) {
 }
 
 void main() {
+         if(u_copy_step == true) {
+        vec2 coord = gl_FragCoord.xy/u_resolution;
+        gl_FragColor = texture2D(u_texture, coord);
+       } else 
   if (!isGridPixel(gl_FragCoord.xy) || !u_grid_active) {
     vec2 coord = getBlockCenter(gl_FragCoord.xy);
     int aliveNeighbors =
