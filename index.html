@@ -55,6 +55,9 @@
       let nextStateIndex = 0
 
       const canvas = document.querySelector('#myCanvas')
+
+      var glContextAttributes = { preserveDrawingBuffer: true }
+      var gl = canvas.getContext('experimental-webgl', glContextAttributes)
       const currentAutomata = document.querySelector('#automataName')
       currentAutomata.innerHTML = shaders[activeShaderIndex]
 
@@ -105,7 +108,7 @@
       // let dyingColor = new THREE.Color('#428405')
       // let gridColor = new THREE.Color('#0D0D0D')
 
-      function changeShaderWIthFixedImage() {
+      function changeShader() {
         loader.load(
           shadersFolder + shaders[activeShaderIndex],
           function (data) {
@@ -120,59 +123,60 @@
             // buffers[previousStateIndex].texture = new THREE.CanvasTexture(
             //   canvas
             // )
+            textureLoader.load(canvas.toDataURL(), (texture) => {
+              let newTexture = texture.clone()
+              renderer.dispose()
+              renderer = new THREE.WebGLRenderer({ canvas: canvas })
+              renderer.setSize(canvas.clientWidth, canvas.clientHeight, false)
+              renderer.autoClearColor = false
+              buffers[previousStateIndex].dispose()
+              buffers[previousStateIndex] = new THREE.WebGLRenderTarget(
+                width,
+                height
+              )
+              buffers[nextStateIndex].dispose()
+              buffers[nextStateIndex] = new THREE.WebGLRenderTarget(
+                width,
+                height
+              )
 
-            renderer.dispose()
-            renderer = new THREE.WebGLRenderer({ canvas: canvas })
-            renderer.setSize(canvas.clientWidth, canvas.clientHeight, false)
-            renderer.autoClearColor = false
-            buffers[previousStateIndex].dispose()
-            buffers[previousStateIndex] = new THREE.WebGLRenderTarget(
-              width,
-              height
-            )
-            buffers[nextStateIndex].dispose()
-            buffers[nextStateIndex] = new THREE.WebGLRenderTarget(width, height)
-            textureLoader.load(
-              './images/1000_700_automata_state.png',
-              (texture) => {
-                clearSquares()
-                buffers[previousStateIndex].texture = texture
+              buffers[previousStateIndex].texture = newTexture
+              buffers[previousStateIndex].texture.needsUpdate = true
 
-                // automataShader.uniforms = THREE.UniformsUtils.clone(
-                //   automataShader.uniforms
-                // )
+              // automataShader.uniforms = THREE.UniformsUtils.clone(
+              //   automataShader.uniforms
+              // )
 
-                automataMesh.material.fragmentShader = data
-                automataMesh.material.needsUpdate = true
-                automataMesh.material.uniformsNeedUpdate = true
+              automataMesh.material.fragmentShader = data
+              automataMesh.material.needsUpdate = true
+              automataMesh.material.uniformsNeedUpdate = true
 
-                // stepper(
-                //   buffers[previousStateIndex],
-                //   buffers[nextStateIndex],
-                //   true
-                // )
-                // display(buffers[nextStateIndex])
-                // nextStateIndex = previousStateIndex
+              // stepper(
+              //   buffers[previousStateIndex],
+              //   buffers[nextStateIndex],
+              //   true
+              // )
+              // display(buffers[nextStateIndex])
+              // nextStateIndex = previousStateIndex
 
-                stepper(
-                  buffers[previousStateIndex],
-                  buffers[nextStateIndex],
-                  true
-                )
+              stepper(
+                buffers[previousStateIndex],
+                buffers[nextStateIndex],
+                true
+              )
 
-                display(buffers[nextStateIndex])
+              display(buffers[nextStateIndex])
 
-                nextStateIndex = previousStateIndex
+              nextStateIndex = previousStateIndex
 
-                previousStateIndex = computePreviousStepIndex()
+              previousStateIndex = computePreviousStepIndex()
 
-                stepper(buffers[previousStateIndex], buffers[nextStateIndex])
+              stepper(buffers[previousStateIndex], buffers[nextStateIndex])
 
-                display(buffers[nextStateIndex])
+              display(buffers[nextStateIndex])
 
-                nextStateIndex = previousStateIndex
-              }
-            )
+              nextStateIndex = previousStateIndex
+            })
           }
         )
       }
@@ -398,13 +402,13 @@
           },
         },
         fragmentShader: `
-        uniform sampler2D u_texture;
-        uniform vec2 u_resolution;
-        void main() {
-          vec2 coord = gl_FragCoord.xy/u_resolution;
-          gl_FragColor = texture2D(u_texture, coord);
-        }
-        `,
+              uniform sampler2D u_texture;
+              uniform vec2 u_resolution;
+              void main() {
+                vec2 coord = gl_FragCoord.xy/u_resolution;
+                gl_FragColor = texture2D(u_texture, coord);
+              }
+              `,
       }
 
       const automataShader = createShader()
@@ -453,7 +457,7 @@
                 return
               }
             } else if (cycleShader && changingShader) {
-              changeShaderWIthFixedImage()
+              changeShader()
               changingShader = false
               return
             } else {
